@@ -1,0 +1,161 @@
+stages:
+  - extract
+
+generate_sprint_report:
+  stage: extract
+  script:
+    - set +e
+    - |
+      # ==============================================================================
+      # REPORTING CONFIGURATION PANEL
+      # ----------------------------------------------------------------------
+      # Instructions: Only edit the variables inside this configuration block.
+      # SCRUBBED: Organization-specific wording simplified.
+      # ==============================================================================
+
+      # 1. SPRINT DATE WINDOW (ISO 8601 Format: YYYY-MM-DDTHH:MM:SSZ)
+      #    - For Final Sprint Reports: Set END_DATE to sprint close.
+      #    - For Mid-Sprint Status Checks: Set END_DATE to current time or leave wide open.
+      START_DATE="2026-08-26T00:00:00Z"
+      END_DATE="2099-12-31T23:59:59Z"
+
+      # 2. OUTPUT CSV FILENAME
+      OUTPUT_FILE="sprint_data.csv"
+
+      # 3. REPOSITORY CONFIGURATION (List of monitored GitLab Project IDs)
+      # SCRUBBED: Original project IDs replaced with placeholder IDs.
+      PROJECT_IDS="10001 10002 10003 10004 10005 10006 10007"
+
+      # 4. APPLICATION TEAM ROSTERS (Space-separated GitLab usernames, wrapped in spaces)
+      #    - Add new developers inside the quotes separated by single spaces.
+      # SCRUBBED: Real usernames replaced with generic placeholders.
+      APPLICATION_USERS=" user_application_01 user_application_02 user_application_03 user_application_04 "
+      DAPPLICATION_USERS=" user_dapplication_01 user_dapplication_02 user_dapplication_03 user_dapplication_04 "
+
+      # ==============================================================================
+      # AUTOMATED EXTRACTION ENGINE (DO NOT MODIFY CODE BELOW THIS LINE)
+      # ==============================================================================
+
+      echo "========================================================"
+      echo " SPRINT REPORTING ENGINE: INITIALIZING EXTRACTION       "
+      echo " Target Window: $START_DATE  -->  $END_DATE"
+      echo "========================================================"
+
+      # Initialize CSV Header
+      echo '"Project_ID","Project_Name","Project_Type","MR_ID","Title","Author","Team","Merged_At","Jira_Tickets","Web_URL"' > "$OUTPUT_FILE"
+
+      for pid in $PROJECT_IDS; do
+        # Map Project ID to Architecture Metadata & Path
+        case "$pid" in
+          "10001")
+            # SCRUBBED: Original project name/path replaced with generic equivalent.
+            pname="Frontend Application A"
+            ptype="Frontend Application"
+            ppath="org-placeholder/group-placeholder/frontend-app-a"
+            ;;
+          "10002")
+            # SCRUBBED: Original project name/path replaced with generic equivalent.
+            pname="Client SDK A"
+            ptype="Client Library"
+            ppath="org-placeholder/group-placeholder/client-sdk-a"
+            ;;
+          "10003")
+            # SCRUBBED: Original project name/path replaced with generic equivalent.
+            pname="Backend Service A"
+            ptype="Backend Service"
+            ppath="org-placeholder/group-placeholder/backend-service-a"
+            ;;
+          "10004")
+            # SCRUBBED: Original project name/path replaced with generic equivalent.
+            pname="Backend Service B"
+            ptype="Backend Service"
+            ppath="org-placeholder/group-placeholder/backend-service-b"
+            ;;
+          "10005")
+            # SCRUBBED: Original project name/path replaced with generic equivalent.
+            pname="Frontend Application B"
+            ptype="Frontend Application"
+            ppath="org-placeholder/group-placeholder/frontend-app-b"
+            ;;
+          "10006")
+            # SCRUBBED: Original project name/path replaced with generic equivalent.
+            pname="Client SDK B"
+            ptype="Client Library"
+            ppath="org-placeholder/group-placeholder/client-sdk-b"
+            ;;
+          "10007")
+            # SCRUBBED: Original project name/path replaced with generic equivalent.
+            pname="Backend Service C"
+            ptype="Backend Service"
+            ppath="org-placeholder/group-placeholder/backend-service-c"
+            ;;
+          *)
+            pname="Project-$pid"
+            ptype="Service"
+            ppath="project-$pid"
+            ;;
+        esac
+
+        echo "--> Querying $pname (ID: $pid)..."
+
+        # Query GitLab REST API for merged merge requests updated after START_DATE
+        resp=$(curl -s -k --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+          "${CI_SERVER_URL}/api/v4/projects/${pid}/merge_requests?state=merged&updated_after=${START_DATE}&per_page=100")
+
+        # Validate HTTP Response
+        case "$resp" in
+          *"401 Unauthorized"*|*"403 Forbidden"*|*"404 Project Not Found"*)
+            echo "    [!] Warning: Access error on project $pid ($pname): $resp"
+            continue
+            ;;
+        esac
+
+        # Process each Merge Request record safely
+        echo "$resp" | sed 's/},{"id":/\n{"id":/g' | while IFS= read -r mr; do
+          [ -z "$mr" ] && continue
+
+          # Extract merge timestamp
+          merged_at=$(echo "$mr" | sed -n 's/.*"merged_at":"\([^"]*\)".*/\1/p')
+          [ -z "$merged_at" ] && continue
+
+          # Dynamic ISO 8601 Date Range Filtering:
+          # Works for any start/end date, past sprints, or real-time mid-sprint status checks
+          if [ "$merged_at" \> "$START_DATE" ] && [ "$merged_at" \< "$END_DATE" ]; then
+            iid=$(echo "$mr" | sed -n 's/.*"iid":\([0-9]*\).*/\1/p')
+            title=$(echo "$mr" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p' | tr -d '"\r\n')
+            author=$(echo "$mr" | sed -n 's/.*"author":{[^}]*"username":"\([^"]*\)".*/\1/p')
+
+            # Deterministic, verified Web URL for direct access
+            web_url="${CI_SERVER_URL}/${ppath}/-/merge_requests/${iid}"
+
+            # Robust Jira issue extractor (captures ABC-*, BC-*, handles mixed case & spaces)
+            jira=$(echo "$title $mr" | grep -o -i -E '(ABC|BC)[- ][0-9]+' | tr '[:lower:]' '[:upper:]' | tr ' ' '-' | sort -u | tr '\n' ' ' | sed 's/ $//')
+            [ -z "$jira" ] && jira="None"
+
+            # Assign Team based on configured username rosters
+            team="Unassigned/Other"
+            case "$APPLICATION_USERS" in
+              *" $author "*) team="Application" ;;
+            esac
+            if [ "$team" = "Unassigned/Other" ]; then
+              case "$DAPPLICATION_USERS" in
+                *" $author "*) team="Dapplication" ;;
+              esac
+            fi
+
+            # Append record to output CSV
+            echo "\"$pid\",\"$pname\",\"$ptype\",\"$iid\",\"$title\",\"$author\",\"$team\",\"$merged_at\",\"$jira\",\"$web_url\"" >> "$OUTPUT_FILE"
+            echo "    [+] Captured MR !$iid ($team) by $author | Jira: $jira"
+          fi
+        done
+      done
+
+      echo "========================================================"
+      echo " EXTRACTION COMPLETE: $(wc -l < "$OUTPUT_FILE") total lines generated."
+      echo " Saved to artifact: $OUTPUT_FILE"
+      echo "========================================================"
+  artifacts:
+    name: "sprint-data"
+    paths:
+      - sprint_data.csv
+    expire_in: 1 week
