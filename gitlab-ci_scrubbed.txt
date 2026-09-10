@@ -16,7 +16,7 @@ generate_sprint_report:
       # 1. SPRINT DATE WINDOW (ISO 8601 Format: YYYY-MM-DDTHH:MM:SSZ)
       #    - For Final Sprint Reports: Set END_DATE to sprint close.
       #    - For Mid-Sprint Status Checks: Set END_DATE to current time or leave wide open.
-      START_DATE="2026-08-26T00:00:00Z"
+      START_DATE="2024-01-01T00:00:00Z"
       END_DATE="2099-12-31T23:59:59Z"
 
       # 2. OUTPUT CSV FILENAME
@@ -30,7 +30,7 @@ generate_sprint_report:
       #    - Add new developers inside the quotes separated by single spaces.
       # SCRUBBED: Real usernames replaced with generic placeholders.
       APPLICATION_USERS=" user_application_01 user_application_02 user_application_03 user_application_04 "
-      DAPPLICATION_USERS=" user_dapplication_01 user_dapplication_02 user_dapplication_03 user_dapplication_04 "
+      PLATFORM_USERS=" user_platform_01 user_platform_02 user_platform_03 user_platform_04 "
 
       # ==============================================================================
       # AUTOMATED EXTRACTION ENGINE (DO NOT MODIFY CODE BELOW THIS LINE)
@@ -138,8 +138,8 @@ generate_sprint_report:
               *" $author "*) team="Application" ;;
             esac
             if [ "$team" = "Unassigned/Other" ]; then
-              case "$DAPPLICATION_USERS" in
-                *" $author "*) team="Dapplication" ;;
+              case "$PLATFORM_USERS" in
+                *" $author "*) team="Platform" ;;
               esac
             fi
 
